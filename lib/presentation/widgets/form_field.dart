@@ -6,6 +6,7 @@ class CustomTextField extends StatefulWidget {
   final String hint;
   final bool password;
   final Widget? suffixIcon;
+  final Function(String)? onChanged;
   CustomTextField(
   this.controller,
   {
@@ -14,6 +15,7 @@ class CustomTextField extends StatefulWidget {
     this.obscure = false,
     this.hint = '',
     this.suffixIcon,
+    this.onChanged,
   });
 
   @override
@@ -35,7 +37,7 @@ class CustomTextFieldState extends State<CustomTextField> {
         style: Theme.of(context).textTheme.titleMedium,
         controller: widget.controller,
         obscureText: widget.obscure,
-
+        onChanged: widget.onChanged,
         decoration: InputDecoration(
           border: InputBorder.none,
           enabledBorder: InputBorder.none,

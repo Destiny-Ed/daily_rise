@@ -89,6 +89,18 @@ import 'package:flutter/material.dart';
 import 'package:daily_rise/data/models/habit_config.dart';
 
 class AppsOnboardingProvider extends ChangeNotifier {
+  List<String> musicGenres = [
+    "pop",
+    "hip hop / rap",
+    "rock",
+    "electronic / EDM",
+    "latin",
+    "R&B",
+    "indie",
+    "gospel",
+    "classical / instrumental",
+  ];
+
   int _currentIndex = 1;
   int get currentIndex => _currentIndex;
   set currentIndex(int value) {
@@ -102,23 +114,45 @@ class AppsOnboardingProvider extends ChangeNotifier {
   String bookTitle = "";
   int waterGlasses = 8;
 
-  // Step 2
-  WorkoutModel? selectedWorkout;
-  int workoutTarget = 20;
+  // Step 2 - MULTIPLE WORKOUTS
+  final Map<int, bool> _selectedWorkouts = {}; // index → selected
+  final Map<int, int> _workoutReps = {}; // index → reps
+
+  bool isWorkoutSelected(int index) => _selectedWorkouts[index] ?? false;
+  int getWorkoutReps(int index) => _workoutReps[index] ?? 20;
+
+  void toggleWorkout(int index) {
+    _selectedWorkouts[index] = !(_selectedWorkouts[index] ?? false);
+    if (!_selectedWorkouts[index]!) {
+      _workoutReps.remove(index);
+    } else {
+      _workoutReps[index] = 20; // default
+    }
+    notifyListeners();
+  }
+
+  void updateReps(int index, int reps) {
+    if (_selectedWorkouts[index] == true) {
+      _workoutReps[index] = reps.clamp(5, 200);
+      notifyListeners();
+    }
+  }
+
+  List<WorkoutModel> get selectedWorkoutsList {
+    return _selectedWorkouts.entries
+        .where((e) => e.value)
+        .map(
+          (e) => WorkoutModel(
+            workout: workouts[e.key].workout,
+            duration: getWorkoutReps(e.key),
+            isReps: true,
+            icon: workouts[e.key].icon,
+          ),
+        )
+        .toList();
+  }
 
   // Step 3
-  List<String> musicGenres = [
-    "pop",
-    "hip hop / rap",
-    "rock",
-    "electronic / EDM",
-    "latin",
-    "R&B",
-    "indie",
-    "gospel",
-    "classical / instrumental",
-  ];
-
   final List<String> _selectedGenres = [];
   List<String> get selectedGenres => _selectedGenres;
   void toggleGenre(String genre) {
@@ -153,14 +187,21 @@ class AppsOnboardingProvider extends ChangeNotifier {
     WorkoutModel(
       duration: 20,
       workout: "jumping jacks",
-      isReps: false,
+      isReps: true,
       icon: Icons.run_circle,
+    ),
+    WorkoutModel(
+      duration: 30,
+      workout: "plank",
+      isReps: false,
+      icon: Icons.timelapse,
     ),
   ];
 
-  // Save all habits
+  // Save all
   Future<void> saveHabits() async {
     final box = HiveService.configBox;
+    final box2 = HiveService.prefsBox;
 
     final habits = [
       HabitConfig(
@@ -179,9 +220,11 @@ class AppsOnboardingProvider extends ChangeNotifier {
       HabitConfig(
         id: "workout",
         name: "Workout",
-        isActive: true,
-        target: workoutTarget,
-        workoutType: selectedWorkout?.workout ?? "push-ups",
+        isActive: selectedWorkoutsList.isNotEmpty,
+        target: selectedWorkoutsList
+            .map((w) => w.duration)
+            .fold(0, (a, b) => a + b),
+        workoutType: selectedWorkoutsList.map((w) => w.workout).join(", "),
         musicGenres: _selectedGenres,
       ),
     ];
@@ -191,7 +234,12 @@ class AppsOnboardingProvider extends ChangeNotifier {
       await box.put(habit.id, habit);
     }
 
-    // Initialize first log
+    // Save detailed workouts
+    await box2.put(
+      "selected_workouts_detailed",
+      selectedWorkoutsList.map((w) => w.toJson()).toList(),
+    );
+
     await _initializeTodayLog();
     notifyListeners();
   }
@@ -199,7 +247,6 @@ class AppsOnboardingProvider extends ChangeNotifier {
   Future<void> _initializeTodayLog() async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
     if (HiveService.logsBox.containsKey(today)) return;
-
     await HiveService.logsBox.put(
       today,
       DailyLog.today(completed: {}, streak: 1),

@@ -1,5 +1,6 @@
 import 'package:daily_rise/presentation/widgets/form_field.dart';
 import 'package:daily_rise/presentation/widgets/social_button.dart';
+import 'package:daily_rise/service/book_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:daily_rise/core/extensions.dart';
@@ -61,9 +62,15 @@ class _ChooseOnBoardingHabitsState extends State<ChooseOnBoardingHabits> {
         return true;
 
       case 2:
-        if (_selectedWorkoutIndex == null) {
+        // if (_selectedWorkoutIndex == null) {
+        //   ScaffoldMessenger.of(context).showSnackBar(
+        //     const SnackBar(content: Text("Please select a workout")),
+        //   );
+        //   return false;
+        // }
+        if (vm.selectedWorkoutsList.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Please select a workout")),
+            const SnackBar(content: Text("Please select at least one workout")),
           );
           return false;
         }
@@ -74,8 +81,8 @@ class _ChooseOnBoardingHabitsState extends State<ChooseOnBoardingHabits> {
           return false;
         }
         // Save step 2
-        vm.selectedWorkout = vm.workouts[_selectedWorkoutIndex!];
-        vm.workoutTarget = _workoutReps;
+        // vm.selectedWorkout = vm.workouts[_selectedWorkoutIndex!];
+        // vm.workoutTarget = _workoutReps;
         return true;
 
       case 3:
@@ -160,7 +167,7 @@ class _ChooseOnBoardingHabitsState extends State<ChooseOnBoardingHabits> {
 }
 
 // Step 1: Reading + Water
-class AppOnboardingStepOne extends StatelessWidget {
+class AppOnboardingStepOne extends StatefulWidget {
   final TextEditingController bookController;
   final int waterCount;
   final ValueChanged<int> onWaterChanged;
@@ -171,6 +178,29 @@ class AppOnboardingStepOne extends StatelessWidget {
     required this.waterCount,
     required this.onWaterChanged,
   });
+
+  @override
+  State<AppOnboardingStepOne> createState() => _AppOnboardingStepOneState();
+}
+
+class _AppOnboardingStepOneState extends State<AppOnboardingStepOne> {
+  List<Book> searchResults = [];
+  bool isSearching = false;
+  String? selectedBookPath;
+
+  Future<void> _searchBooks(String query) async {
+    if (query.length < 2) {
+      setState(() => searchResults = []);
+      return;
+    }
+
+    setState(() => isSearching = true);
+    final results = await BookService.search(query);
+    setState(() {
+      searchResults = results;
+      isSearching = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -230,9 +260,10 @@ class AppOnboardingStepOne extends StatelessWidget {
                         Padding(
                           padding: const EdgeInsets.all(10.0),
                           child: CustomTextField(
-                            bookController,
+                            widget.bookController,
                             hint: "e.g. Atomic Habits",
                             password: false,
+                            onChanged: _searchBooks,
                             suffixIcon: Icon(
                               Icons.search,
                               color: Theme.of(
@@ -241,6 +272,107 @@ class AppOnboardingStepOne extends StatelessWidget {
                             ),
                           ),
                         ),
+
+                        if (widget.bookController.text.isNotEmpty)
+                          SizedBox(
+                            child:
+                                !(searchResults.isEmpty &&
+                                    widget.bookController.text.isNotEmpty &&
+                                    !isSearching)
+                                ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20.0,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Text(
+                                            "Can't find your book",
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.titleMedium,
+                                          ),
+                                          TextButton(
+                                            onPressed: () {},
+                                            child: Text("upload (pdf)".cap),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : SizedBox(
+                                    height: context.screenSize().height / 2,
+                                    child: ListView.builder(
+                                      shrinkWrap: true,
+                                      padding: const EdgeInsets.all(10),
+                                      itemCount: searchResults.length,
+                                      itemBuilder: (context, index) {
+                                        final book = searchResults[index];
+                                        return Card(
+                                          child: ListTile(
+                                            leading: book.coverUrl.isNotEmpty
+                                                ? Image.network(
+                                                    book.coverUrl,
+                                                    width: 50,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (_, __, ___) =>
+                                                            const Icon(
+                                                              Icons.book,
+                                                            ),
+                                                  )
+                                                : const Icon(Icons.book),
+                                            title: Text(
+                                              book.title,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.titleMedium,
+                                            ),
+                                            subtitle: Text(
+                                              book.author,
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.titleSmall,
+                                            ),
+                                            trailing:
+                                                selectedBookPath == book.id
+                                                ? const Icon(
+                                                    Icons.check_circle,
+                                                    color: AppColors.green,
+                                                  )
+                                                : null,
+                                            onTap: () async {
+                                              final path =
+                                                  await BookService.downloadBook(
+                                                    book.epubUrl,
+                                                    book.title,
+                                                  );
+                                              if (path != null && mounted) {
+                                                setState(
+                                                  () => selectedBookPath =
+                                                      book.id,
+                                                );
+                                                widget.bookController.text =
+                                                    book.title;
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      "Downloaded: ${book.title}",
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                          ),
                       ],
                     ),
                   ],
@@ -269,6 +401,7 @@ class AppOnboardingStepOne extends StatelessWidget {
                       trailing: Switch(value: true, onChanged: (value) {}),
                     ),
                     Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Divider(color: AppColors.darkGray),
                         Padding(
@@ -295,11 +428,13 @@ class AppOnboardingStepOne extends StatelessWidget {
                               counterButton(
                                 context,
                                 Icons.remove,
-                                () => onWaterChanged(waterCount - 1),
-                                waterCount > 1,
+                                () => widget.onWaterChanged(
+                                  widget.waterCount - 1,
+                                ),
+                                widget.waterCount > 1,
                               ),
                               Text(
-                                "$waterCount",
+                                "${widget.waterCount}",
                                 style: Theme.of(
                                   context,
                                 ).textTheme.headlineLarge,
@@ -307,7 +442,9 @@ class AppOnboardingStepOne extends StatelessWidget {
                               counterButton(
                                 context,
                                 Icons.add,
-                                () => onWaterChanged(waterCount + 1),
+                                () => widget.onWaterChanged(
+                                  widget.waterCount + 1,
+                                ),
                                 true,
                               ),
                             ],
@@ -369,7 +506,8 @@ class AppOnboardingStepTwo extends StatelessWidget {
             itemCount: vm.workouts.length,
             itemBuilder: (context, index) {
               final workout = vm.workouts[index];
-              final isSelected = selectedIndex == index;
+              final isSelected = vm.isWorkoutSelected(index);
+              final reps = vm.getWorkoutReps(index);
 
               return GestureDetector(
                 onTap: () => onSelect(index),
